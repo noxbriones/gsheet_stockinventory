@@ -136,9 +136,12 @@ export const signIn = async () => {
       let timeoutId = null
       
       // Create a new token client with callback
+      // Try popup mode first; if COOP blocks it, the error will be caught
       const client = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
+        // Don't specify ux_mode - let Google Identity Services choose the best method
+        // It will use popup if possible, or fall back to redirect if COOP blocks it
         callback: (response) => {
           // Clear timeout
           if (timeoutId) {
