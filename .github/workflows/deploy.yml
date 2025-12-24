@@ -31,15 +31,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.VITE_GOOGLE_CLIENT_ID }}" ]; then
+            echo "::error::VITE_GOOGLE_CLIENT_ID secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VITE_GOOGLE_API_KEY }}" ]; then
+            echo "::error::VITE_GOOGLE_API_KEY secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VITE_SPREADSHEET_ID }}" ]; then
+            echo "::error::VITE_SPREADSHEET_ID secret is not set"
+            exit 1
+          fi
+          echo "✓ All required secrets are set"
+
       - name: Build
         run: npm run build
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_API_KEY: ${{ secrets.VITE_GOOGLE_API_KEY }}
           VITE_SPREADSHEET_ID: ${{ secrets.VITE_SPREADSHEET_ID }}
-          VITE_SHEET_NAME: ${{ secrets.VITE_SHEET_NAME }}
-          VITE_DATA_SHEET_NAME: ${{ secrets.VITE_DATA_SHEET_NAME }}
-          VITE_LOW_STOCK_THRESHOLD: ${{ secrets.VITE_LOW_STOCK_THRESHOLD }}
+          VITE_SHEET_NAME: ${{ secrets.VITE_SHEET_NAME || 'Sheet1' }}
+          VITE_DATA_SHEET_NAME: ${{ secrets.VITE_DATA_SHEET_NAME || 'Data' }}
+          VITE_LOW_STOCK_THRESHOLD: ${{ secrets.VITE_LOW_STOCK_THRESHOLD || '10' }}
           VITE_BASE_PATH: /gsheet_stockinventory/
 
       - name: Setup Pages
