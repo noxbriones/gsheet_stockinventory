@@ -47,13 +47,45 @@ export const InventoryProvider = ({ children }) => {
 
       try {
         await initGoogleAPI()
-        const signedIn = await checkSignedIn()
-        setIsAuthenticated(signedIn)
-        if (signedIn) {
-          await Promise.all([
-            fetchItems(),
-            fetchCategoriesList()
-          ])
+        
+        // Check if we're returning from OAuth redirect
+        const urlParams = new URLSearchParams(window.location.search)
+        const hasOAuthCode = urlParams.has('code') || urlParams.has('state')
+        const isOAuthPending = sessionStorage.getItem('google_sheets_oauth_pending') === 'true'
+        
+        if (hasOAuthCode && isOAuthPending) {
+          // We're returning from OAuth redirect, try to sign in
+          // The signIn function will handle the OAuth callback
+          try {
+            await signIn()
+            setIsAuthenticated(true)
+            await Promise.all([
+              fetchItems(),
+              fetchCategoriesList()
+            ])
+          } catch (err) {
+            // If sign in fails, check if already signed in
+            const signedIn = await checkSignedIn()
+            setIsAuthenticated(signedIn)
+            if (signedIn) {
+              await Promise.all([
+                fetchItems(),
+                fetchCategoriesList()
+              ])
+            } else {
+              setError('Failed to complete sign in: ' + err.message)
+            }
+          }
+        } else {
+          // Normal initialization
+          const signedIn = await checkSignedIn()
+          setIsAuthenticated(signedIn)
+          if (signedIn) {
+            await Promise.all([
+              fetchItems(),
+              fetchCategoriesList()
+            ])
+          }
         }
       } catch (err) {
         setError('Failed to initialize Google API: ' + err.message)

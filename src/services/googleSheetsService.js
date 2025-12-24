@@ -21,6 +21,7 @@ let accessToken = null
 // Storage keys
 const STORAGE_KEY = 'google_sheets_auth_token'
 const STORAGE_TIMESTAMP_KEY = 'google_sheets_auth_timestamp'
+const OAUTH_PENDING_KEY = 'google_sheets_oauth_pending'
 
 // Load token from localStorage
 const loadStoredToken = () => {
@@ -118,6 +119,11 @@ export const initGoogleAPI = () => {
   })
 }
 
+// Global callback storage for OAuth redirect handling
+let oauthCallbackResolve = null
+let oauthCallbackReject = null
+let oauthTimeoutId = null
+
 // Sign in user
 export const signIn = async () => {
   if (!isInitialized) {
@@ -130,67 +136,113 @@ export const signIn = async () => {
 
   return new Promise((resolve, reject) => {
     try {
-      // Store resolve/reject for callback
-      let tokenResolve = null
-      let tokenReject = null
-      let timeoutId = null
+      // Check if we're returning from OAuth redirect
+      const urlParams = new URLSearchParams(window.location.search)
+      const oauthError = urlParams.get('error')
+      const hasOAuthCode = urlParams.has('code') || urlParams.has('state')
       
-      // Create a new token client with callback
-      // Try popup mode first; if COOP blocks it, the error will be caught
+      if (oauthError) {
+        // Clean URL and clear pending flag
+        window.history.replaceState({}, document.title, window.location.pathname)
+        sessionStorage.removeItem(OAUTH_PENDING_KEY)
+        reject(new Error(`OAuth error: ${oauthError}`))
+        return
+      }
+      
+      // Store resolve/reject for callback
+      oauthCallbackResolve = resolve
+      oauthCallbackReject = reject
+      
+      // Callback function for token response
+      const handleTokenResponse = (response) => {
+        // Clear pending flag and timeout
+        sessionStorage.removeItem(OAUTH_PENDING_KEY)
+        if (oauthTimeoutId) {
+          clearTimeout(oauthTimeoutId)
+          oauthTimeoutId = null
+        }
+        
+        // Clean URL if we have OAuth params
+        if (hasOAuthCode) {
+          window.history.replaceState({}, document.title, window.location.pathname)
+        }
+        
+        if (response.error) {
+          console.error('Token error:', response)
+          isSignedIn = false
+          accessToken = null
+          if (oauthCallbackReject) {
+            oauthCallbackReject(new Error(response.error))
+          }
+          oauthCallbackResolve = null
+          oauthCallbackReject = null
+          return
+        }
+        accessToken = response.access_token
+        isSignedIn = true
+        // Save token to localStorage
+        saveStoredToken(accessToken)
+        // Set the access token for gapi requests
+        gapi.client.setToken({ access_token: accessToken })
+        if (oauthCallbackResolve) {
+          oauthCallbackResolve(true)
+        }
+        oauthCallbackResolve = null
+        oauthCallbackReject = null
+      }
+      
+      // Use redirect mode for better reliability on GitHub Pages
+      // Popup mode often fails due to browser security policies
       const client = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
-        // Don't specify ux_mode - let Google Identity Services choose the best method
-        // It will use popup if possible, or fall back to redirect if COOP blocks it
-        callback: (response) => {
-          // Clear timeout
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-            timeoutId = null
-          }
-          
-          if (response.error) {
-            console.error('Token error:', response)
-            isSignedIn = false
-            accessToken = null
-            if (tokenReject) {
-              tokenReject(new Error(response.error))
-            }
-            return
-          }
-          accessToken = response.access_token
-          isSignedIn = true
-          // Save token to localStorage
-          saveStoredToken(accessToken)
-          // Set the access token for gapi requests
-          gapi.client.setToken({ access_token: accessToken })
-          if (tokenResolve) {
-            tokenResolve(true)
-          }
-        }
+        ux_mode: 'redirect',
+        redirect_uri: window.location.origin + window.location.pathname,
+        callback: handleTokenResponse
       })
       
-      // Create promise that resolves when callback is called
-      const tokenPromise = new Promise((res, rej) => {
-        tokenResolve = res
-        tokenReject = rej
-      })
-      
-      // Request access token - omit prompt to allow automatic sign-in if user previously consented
-      client.requestAccessToken()
-      
-      // Timeout after 30 seconds
-      timeoutId = setTimeout(() => {
-        if (!isSignedIn) {
-          tokenReject = null
-          tokenResolve = null
-          reject(new Error('Sign in timeout'))
+      if (!hasOAuthCode) {
+        // Mark that we're initiating OAuth
+        sessionStorage.setItem(OAUTH_PENDING_KEY, 'true')
+        
+        // Request access token (will redirect to Google)
+        try {
+          client.requestAccessToken()
+          // The redirect will happen, so this promise won't resolve until we return
+          // The callback will fire when the page loads after redirect
+        } catch (error) {
+          sessionStorage.removeItem(OAUTH_PENDING_KEY)
+          oauthCallbackResolve = null
+          oauthCallbackReject = null
+          console.error('Failed to initiate OAuth:', error)
+          reject(new Error(`Failed to initiate OAuth: ${error.message}`))
         }
-      }, 30000)
-      
-      // Wait for callback
-      tokenPromise.then(resolve).catch(reject)
+      } else {
+        // We're returning from OAuth redirect
+        // The callback should fire automatically when the client is initialized
+        // Set a timeout in case it doesn't fire
+        oauthTimeoutId = setTimeout(() => {
+          if (!isSignedIn && oauthCallbackReject) {
+            sessionStorage.removeItem(OAUTH_PENDING_KEY)
+            oauthCallbackReject(new Error('OAuth callback timeout after redirect'))
+            oauthCallbackResolve = null
+            oauthCallbackReject = null
+          }
+        }, 10000)
+        
+        // Trigger the callback by requesting token (with no prompt since we have code)
+        // The callback will be called automatically by Google Identity Services
+        try {
+          client.requestAccessToken({ prompt: 'none' })
+        } catch (error) {
+          // If that fails, the callback should still fire automatically
+          console.log('Note: Manual token request failed, waiting for automatic callback')
+        }
+      }
     } catch (error) {
+      sessionStorage.removeItem(OAUTH_PENDING_KEY)
+      oauthCallbackResolve = null
+      oauthCallbackReject = null
       console.error('Sign in error:', error)
       reject(error)
     }
