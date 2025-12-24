@@ -384,6 +384,25 @@ const restoreSession = async () => {
   })
 }
 
+// Validate spreadsheet ID
+const validateSpreadsheetId = () => {
+  if (!SPREADSHEET_ID || SPREADSHEET_ID.trim() === '') {
+    throw new Error(
+      'Spreadsheet ID is not configured. Please set VITE_SPREADSHEET_ID environment variable in GitHub Secrets.'
+    )
+  }
+
+  // Check if spreadsheet ID looks invalid (common mistakes)
+  if (SPREADSHEET_ID === 'Main' || SPREADSHEET_ID === 'Sheet1' || SPREADSHEET_ID.length < 10) {
+    throw new Error(
+      `Invalid Spreadsheet ID: "${SPREADSHEET_ID}". ` +
+      `This looks like a sheet name, not a spreadsheet ID. ` +
+      `Please check your VITE_SPREADSHEET_ID GitHub Secret. ` +
+      `Spreadsheet ID should be a long string from the Google Sheets URL (between /d/ and /edit).`
+    )
+  }
+}
+
 // Ensure user is signed in
 const ensureSignedIn = async () => {
   const signedIn = await checkSignedIn()
@@ -395,6 +414,7 @@ const ensureSignedIn = async () => {
 // Get all items from spreadsheet
 export const getAllItems = async () => {
   await ensureSignedIn()
+  validateSpreadsheetId()
 
   try {
     // First, verify the spreadsheet exists and get sheet info
@@ -480,6 +500,7 @@ const columnIndexToLetter = (index) => {
 // Get categories from Data sheet
 export const getCategories = async () => {
   await ensureSignedIn()
+  validateSpreadsheetId()
 
   try {
     // First, get the Data sheet to find the category column
@@ -528,6 +549,7 @@ export const getCategories = async () => {
 // Add new item to spreadsheet
 export const addItem = async (item) => {
   await ensureSignedIn()
+  validateSpreadsheetId()
 
   try {
     // First, ensure header row exists
@@ -571,6 +593,7 @@ export const addItem = async (item) => {
 // Update existing item
 export const updateItem = async (id, item) => {
   await ensureSignedIn()
+  validateSpreadsheetId()
 
   try {
     // First, find the row number for this item
@@ -618,6 +641,7 @@ export const updateItem = async (id, item) => {
 // Delete item from spreadsheet
 export const deleteItem = async (id) => {
   await ensureSignedIn()
+  validateSpreadsheetId()
 
   try {
     // First, find the row number for this item
