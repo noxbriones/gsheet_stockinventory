@@ -345,6 +345,24 @@ export const getAllItems = async () => {
   await ensureSignedIn()
 
   try {
+    // First, verify the spreadsheet exists and get sheet info
+    const spreadsheetInfo = await gapi.client.sheets.spreadsheets.get({
+      spreadsheetId: SPREADSHEET_ID
+    })
+
+    // Check if the sheet exists
+    const sheetExists = spreadsheetInfo.result.sheets?.some(
+      sheet => sheet.properties.title === SHEET_NAME
+    )
+
+    if (!sheetExists) {
+      const availableSheets = spreadsheetInfo.result.sheets?.map(s => s.properties.title).join(', ') || 'none'
+      throw new Error(
+        `Sheet "${SHEET_NAME}" not found. Available sheets: ${availableSheets}. ` +
+        `Please check VITE_SHEET_NAME environment variable or create a sheet named "${SHEET_NAME}".`
+      )
+    }
+
     const response = await gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAME}!A2:I` // Skip header row
@@ -368,6 +386,31 @@ export const getAllItems = async () => {
     })
   } catch (error) {
     console.error('Error fetching items:', error)
+    
+    // Provide more helpful error messages
+    if (error.status === 400) {
+      const errorMessage = error.result?.error?.message || error.message || 'Bad Request'
+      throw new Error(
+        `Failed to fetch items from spreadsheet: ${errorMessage}. ` +
+        `Please verify:\n` +
+        `1. Spreadsheet ID is correct: ${SPREADSHEET_ID}\n` +
+        `2. Sheet name "${SHEET_NAME}" exists in the spreadsheet\n` +
+        `3. You have permission to access this spreadsheet\n` +
+        `4. The spreadsheet is not deleted or moved`
+      )
+    } else if (error.status === 403) {
+      throw new Error(
+        'Permission denied. Please ensure:\n' +
+        '1. You are signed in with a Google account that has access to the spreadsheet\n' +
+        '2. The spreadsheet is shared with your Google account\n' +
+        '3. Google Sheets API is enabled in your Google Cloud project'
+      )
+    } else if (error.status === 404) {
+      throw new Error(
+        `Spreadsheet not found. Please verify the Spreadsheet ID: ${SPREADSHEET_ID}`
+      )
+    }
+    
     throw error
   }
 }
