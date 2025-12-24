@@ -59,7 +59,7 @@ const SearchBar = () => {
             </div>
 
             <div className="space-y-2 flex-[1_1_0%] min-w-0">
-              <Label htmlFor="stockLevel">Stock Level</Label>
+              <Label htmlFor="stockLevel">Status</Label>
               <Select
                 id="stockLevel"
                 value={filterStockLevel}

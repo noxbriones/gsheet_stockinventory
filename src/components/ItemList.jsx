@@ -47,10 +47,10 @@ const ItemList = ({ onEdit }) => {
 
   return (
     <div className="mt-4 sm:mt-6">
-      <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
+      <div className="mb-3 sm:mb-4 flex flex-row justify-between items-center gap-3">
+        <div className="flex items-center gap-3">
           <h2 className="text-xl sm:text-2xl font-semibold">Inventory Items</h2>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+          <p className="text-muted-foreground text-xs sm:text-sm">
             Showing {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -58,7 +58,6 @@ const ItemList = ({ onEdit }) => {
           onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
           variant="outline"
           size="sm"
-          className="w-full sm:w-auto"
         >
           {viewMode === 'card' ? (
             <>
