@@ -5,7 +5,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
-import { Loader2, Calendar, Trash2, Save } from 'lucide-react'
+import { Loader2, Calendar, Trash2, Save, Plus, Minus } from 'lucide-react'
 import { Alert, AlertDescription } from './ui/alert'
 import { LOW_STOCK_THRESHOLD } from '../utils/constants'
 
@@ -106,6 +106,12 @@ const ItemForm = ({ item, onClose }) => {
     }
   }
 
+  const handleQuantityChange = (delta) => {
+    const currentValue = parseInt(formData.quantity || '0', 10)
+    const newValue = Math.max(0, currentValue + delta)
+    handleChange('quantity', newValue.toString())
+  }
+
   const handleDelete = async () => {
     if (!isEditing) return
     
@@ -150,10 +156,20 @@ const ItemForm = ({ item, onClose }) => {
             )}
           </div>
 
-          {/* Quantity, Price, SKU row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="quantity" className="text-sm sm:text-base">Quantity</Label>
+          {/* Row 1: Quantity (full width) */}
+          <div className="space-y-1.5 sm:space-y-2">
+            <Label htmlFor="quantity" className="text-sm sm:text-base">Quantity</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => handleQuantityChange(-1)}
+                className="h-10 w-10 flex-shrink-0"
+                disabled={parseInt(formData.quantity || '0', 10) <= 0}
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
               <Input
                 id="quantity"
                 type="number"
@@ -161,13 +177,40 @@ const ItemForm = ({ item, onClose }) => {
                 value={formData.quantity}
                 onChange={(e) => handleChange('quantity', e.target.value)}
                 placeholder="0"
-                className={errors.quantity ? 'border-destructive' : ''}
+                className={`flex-1 ${errors.quantity ? 'border-destructive' : ''}`}
               />
-              {errors.quantity && (
-                <p className="text-sm text-destructive">{errors.quantity}</p>
-              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => handleQuantityChange(1)}
+                className="h-10 w-10 flex-shrink-0"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
+            {errors.quantity && (
+              <p className="text-sm text-destructive">{errors.quantity}</p>
+            )}
+          </div>
 
+          {/* Row 2: Category (left) and Price (right) — 2 columns */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="category" className="text-sm sm:text-base">Category</Label>
+              <Select
+                id="category"
+                value={formData.category}
+                onChange={(e) => handleChange('category', e.target.value)}
+              >
+                <option value="">Select a category</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <div className="space-y-1.5 sm:space-y-2">
               <Label htmlFor="price" className="text-sm sm:text-base">Price</Label>
               <Input
@@ -184,7 +227,10 @@ const ItemForm = ({ item, onClose }) => {
                 <p className="text-sm text-destructive">{errors.price}</p>
               )}
             </div>
+          </div>
 
+          {/* Row 3: SKU (left) and Low Stock Level (right) — 2 columns */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <div className="space-y-1.5 sm:space-y-2">
               <Label htmlFor="sku" className="text-sm sm:text-base">SKU</Label>
               <Input
@@ -194,26 +240,6 @@ const ItemForm = ({ item, onClose }) => {
                 placeholder="Stock keeping unit"
               />
             </div>
-          </div>
-
-          {/* Category, Low Stock Level row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="category" className="text-sm sm:text-base">Category</Label>
-              <Select
-                id="category"
-                value={formData.category}
-                onChange={(e) => handleChange('category', e.target.value)}
-              >
-                <option value="">Select a category</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
             <div className="space-y-1.5 sm:space-y-2">
               <Label htmlFor="lowStockLevel" className="text-sm sm:text-base">Low Stock Level</Label>
               <Input
@@ -254,15 +280,15 @@ const ItemForm = ({ item, onClose }) => {
             </div>
           )}
 
-          <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0 sm:justify-between">
-            <div className="flex gap-2 w-full sm:w-auto order-1">
+          <DialogFooter className="flex-row gap-2 justify-between">
+            <div className="flex gap-2">
               {isEditing && (
                 <Button 
                   type="button" 
                   variant="destructive" 
                   onClick={handleDelete} 
                   disabled={loading}
-                  className="w-full sm:w-auto"
+                  className="col-auto"
                 >
                   {loading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -273,20 +299,20 @@ const ItemForm = ({ item, onClose }) => {
                 </Button>
               )}
             </div>
-            <div className="flex gap-2 w-full sm:w-auto order-2 sm:ml-auto">
+            <div className="flex gap-2">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={onClose} 
                 disabled={loading}
-                className="w-full sm:w-auto"
+                className=""
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="w-full sm:w-auto"
+                className=""
               >
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
