@@ -2,6 +2,101 @@
 
 ## Common Errors and Solutions
 
+### Content Security Policy (CSP) Error
+
+**Error Message:**
+```
+Connecting to 'https://www.google.com/images/cleardot.gif' violates the following Content Security Policy directive: "connect-src ..."
+```
+
+**Possible Causes:**
+
+1. **Missing Google Domain in CSP**
+   - The CSP `connect-src` directive doesn't include `www.google.com`
+   - Google services sometimes make requests to `www.google.com` (e.g., tracking pixels)
+   - The wildcard `*.googleapis.com` only covers API subdomains, not `google.com`
+
+2. **Incomplete CSP Configuration**
+   - CSP may be missing other required Google domains
+   - Some Google services use different subdomains
+
+**Solutions:**
+
+1. **Update CSP in `index.html`:**
+   - Add `https://www.google.com` and `https://*.google.com` to the `connect-src` directive
+   - This allows connections to Google's main domain and subdomains
+   - Example:
+     ```
+     connect-src 'self' ... https://www.google.com https://*.google.com
+     ```
+
+2. **Rebuild the Application:**
+   - After updating `index.html`, rebuild the application:
+     ```bash
+     npm run build
+     ```
+   - The updated CSP will be included in the `dist/index.html` file
+
+3. **Verify CSP Configuration:**
+   - Check that all required Google domains are included:
+     - `https://apis.google.com`
+     - `https://accounts.google.com`
+     - `https://*.googleapis.com`
+     - `https://www.google.com`
+     - `https://*.google.com`
+
+**Note:** The `cleardot.gif` is a 1x1 transparent pixel used by Google for tracking/analytics. While blocking it won't break core functionality, it may cause console warnings. Adding `www.google.com` to CSP resolves this.
+
+### Cross-Origin-Opener-Policy (COOP) Error
+
+**Error Message:**
+```
+Cross-Origin-Opener-Policy policy would block the window.opener call.
+```
+
+**Possible Causes:**
+
+1. **OAuth Popup Mode Attempted**
+   - The application is trying to use popup mode for OAuth
+   - Browser security policies block window.opener calls
+
+2. **Hosting Provider COOP Headers**
+   - Your hosting provider (e.g., GitHub Pages) might be setting COOP headers
+   - These headers block cross-origin window.opener access
+
+3. **Browser Security Settings**
+   - Browser extensions or security settings blocking OAuth popups
+   - Strict privacy settings preventing window.opener
+
+**Solutions:**
+
+1. **Verify Redirect Mode is Used:**
+   - The application uses redirect mode (`ux_mode: 'redirect'`) by default
+   - This avoids window.opener issues entirely
+   - If you see this error, it might be a warning that can be safely ignored
+
+2. **Check Hosting Configuration:**
+   - If using GitHub Pages or similar, check if COOP headers are being set
+   - These headers are usually not set by default
+   - The application is designed to work with redirect mode, which doesn't require window.opener
+
+3. **Clear Browser Cache:**
+   - Clear browser cache and cookies
+   - Try in an incognito/private window
+   - Disable browser extensions temporarily
+
+4. **Verify OAuth Configuration:**
+   - Ensure `ux_mode: 'redirect'` is set in the OAuth client configuration
+   - Check that redirect_uri is properly configured in Google Cloud Console
+   - Verify the redirect URI matches your application URL exactly
+
+**Note:** This error is typically a warning and shouldn't prevent authentication if redirect mode is properly configured. The application will redirect to Google's OAuth page and back, which doesn't require window.opener.
+
+**If the error persists:**
+- Check browser console for more details
+- Verify the OAuth flow completes successfully despite the warning
+- The authentication should still work with redirect mode
+
 ### 400 Bad Request - Google Sheets API
 
 **Error Message:**
@@ -69,8 +164,89 @@ GET https://content-sheets.googleapis.com/v4/spreadsheets/.../values/Sheet1!A2:I
 ### Other Common Issues
 
 #### 403 Forbidden
-- **Cause**: No permission to access the spreadsheet
-- **Fix**: Share the spreadsheet with your Google account
+
+**Error Message:**
+```
+GET https://content-sheets.googleapis.com/v4/spreadsheets/... 403 (Forbidden)
+```
+
+**Possible Causes:**
+
+1. **Not Authenticated or Token Expired**
+   - You haven't signed in with Google
+   - Your authentication token has expired
+   - The token was cleared from browser storage
+
+2. **Insufficient Permissions**
+   - The spreadsheet is not shared with your Google account
+   - Your Google account doesn't have access to the spreadsheet
+   - The spreadsheet owner hasn't granted you permission
+
+3. **API Configuration Issues**
+   - Google Sheets API is not enabled in your Google Cloud project
+   - OAuth credentials are incorrect or misconfigured
+   - API key restrictions are blocking the request
+
+4. **Token Not Set Properly**
+   - The OAuth token isn't being sent with the request
+   - The token format is incorrect
+
+**Solutions:**
+
+1. **Sign In Again:**
+   - Click the "Sign In" button in the application
+   - Complete the Google OAuth flow
+   - Grant the necessary permissions when prompted
+
+2. **Check Spreadsheet Sharing:**
+   - Open your Google Spreadsheet
+   - Click the "Share" button (top right)
+   - Ensure your Google account email is added with at least "Viewer" access
+   - For editing, you need "Editor" access
+   - Make sure you're using the same Google account in the app
+
+3. **Verify Google Cloud Configuration:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Select your project
+   - Navigate to "APIs & Services" > "Enabled APIs"
+   - Ensure "Google Sheets API" is enabled
+   - Check OAuth 2.0 Client ID configuration
+
+4. **Check Environment Variables:**
+   - Verify `VITE_GOOGLE_CLIENT_ID` is correct
+   - Verify `VITE_GOOGLE_API_KEY` is correct
+   - Ensure `VITE_SPREADSHEET_ID` matches your spreadsheet
+
+5. **Clear Browser Storage and Retry:**
+   - Open browser Developer Tools (F12)
+   - Go to Application tab > Local Storage
+   - Clear all items related to the app
+   - Refresh the page and sign in again
+
+**How to Fix:**
+
+1. **Immediate Fix:**
+   ```
+   1. Click "Sign In" in the application
+   2. Complete Google authentication
+   3. Grant permissions when prompted
+   ```
+
+2. **Verify Spreadsheet Access:**
+   ```
+   1. Open: https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit
+   2. Click "Share" button
+   3. Add your Google account email
+   4. Set permission to "Editor" or "Viewer"
+   ```
+
+3. **Check Google Cloud Setup:**
+   ```
+   1. Go to Google Cloud Console
+   2. Verify Google Sheets API is enabled
+   3. Check OAuth consent screen is configured
+   4. Verify OAuth 2.0 Client ID is correct
+   ```
 
 #### 404 Not Found
 - **Cause**: Spreadsheet ID is incorrect or spreadsheet was deleted

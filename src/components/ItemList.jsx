@@ -5,9 +5,9 @@ import { Card, CardContent } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { LOW_STOCK_THRESHOLD } from '../utils/constants'
-import { Loader2, AlertCircle, Package, Table, LayoutGrid } from 'lucide-react'
+import { Loader2, AlertCircle, Package, Table, LayoutGrid, RefreshCw } from 'lucide-react'
 
-const ItemList = ({ onEdit }) => {
+const ItemList = ({ onEdit, onRefresh, refreshLoading }) => {
   const { filteredItems, loading, error } = useInventory()
   const [viewMode, setViewMode] = useState('card') // 'card' or 'table'
 
@@ -54,23 +54,35 @@ const ItemList = ({ onEdit }) => {
             Showing {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button
-          onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
-          variant="outline"
-          size="sm"
-        >
-          {viewMode === 'card' ? (
-            <>
-              <Table className="h-4 w-4 mr-2" />
-              View as Table
-            </>
-          ) : (
-            <>
-              <LayoutGrid className="h-4 w-4 mr-2" />
-              View as Cards
-            </>
-          )}
-        </Button>
+        <div className="flex flex-row items-center gap-2">
+          <Button
+            onClick={onRefresh}
+            variant="outline"
+            size="sm"
+            disabled={refreshLoading}
+            title="Refresh inventory data"
+          >
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+          <Button
+            onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
+            variant="outline"
+            size="sm"
+          >
+            {viewMode === 'card' ? (
+              <>
+                <Table className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">View as Table</span>
+              </>
+            ) : (
+              <>
+                <LayoutGrid className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">View as Cards</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
       
       {viewMode === 'card' ? (

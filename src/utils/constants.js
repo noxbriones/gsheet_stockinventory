@@ -2,6 +2,7 @@
 export const SPREADSHEET_ID = import.meta.env.VITE_SPREADSHEET_ID || ''
 export const SHEET_NAME = import.meta.env.VITE_SHEET_NAME || 'Sheet1'
 export const DATA_SHEET_NAME = import.meta.env.VITE_DATA_SHEET_NAME || 'Data'
+export const QUANTITY_LOG_SHEET_NAME = import.meta.env.VITE_QUANTITY_LOG_SHEET_NAME || 'QuantityLog'
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 export const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || ''
 export const LOW_STOCK_THRESHOLD = parseInt(import.meta.env.VITE_LOW_STOCK_THRESHOLD || '10', 10)
@@ -49,6 +50,28 @@ export const COLUMN_NAMES = [
   'Description',
   'Low Stock Level',
   'Last Updated'
+]
+
+// Quantity log column mappings (0-indexed)
+export const QUANTITY_LOG_COLUMNS = {
+  TIMESTAMP: 0,
+  ITEM_ID: 1,
+  ITEM_NAME: 2,
+  OLD_QUANTITY: 3,
+  NEW_QUANTITY: 4,
+  CHANGE: 5,
+  CHANGE_TYPE: 6
+}
+
+// Quantity log column names for header row
+export const QUANTITY_LOG_COLUMN_NAMES = [
+  'Timestamp',
+  'Item ID',
+  'Item Name',
+  'Old Quantity',
+  'New Quantity',
+  'Change',
+  'Change Type'
 ]
 
 // Google API scopes

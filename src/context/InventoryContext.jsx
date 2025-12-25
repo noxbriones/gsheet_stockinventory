@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import {
   initGoogleAPI,
   signIn,
@@ -8,9 +8,20 @@ import {
   getCategories as fetchCategories,
   addItem as createItem,
   updateItem as modifyItem,
-  deleteItem as removeItem
+  deleteItem as removeItem,
+  removeOldQuantityLogEntries
 } from '../services/googleSheetsService'
 import { LOW_STOCK_THRESHOLD, validateEnvVars } from '../utils/constants'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '../components/ui/dialog'
+import { Button } from '../components/ui/button'
+import { Loader2, Trash2 } from 'lucide-react'
 
 const InventoryContext = createContext()
 
@@ -32,6 +43,12 @@ export const InventoryProvider = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterStockLevel, setFilterStockLevel] = useState('all')
+  const [showCleanupDialog, setShowCleanupDialog] = useState(false)
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  
+  // Refs to prevent concurrent API calls
+  const fetchingItemsRef = useRef(false)
+  const fetchingCategoriesRef = useRef(false)
 
   // Initialize Google API on mount
   useEffect(() => {
@@ -133,6 +150,13 @@ export const InventoryProvider = ({ children }) => {
 
   // Fetch all items
   const fetchItems = useCallback(async () => {
+    // Prevent concurrent calls
+    if (fetchingItemsRef.current) {
+      console.log('Items fetch already in progress, skipping...')
+      return
+    }
+    
+    fetchingItemsRef.current = true
     setLoading(true)
     setError(null)
     try {
@@ -143,11 +167,19 @@ export const InventoryProvider = ({ children }) => {
       console.error('Fetch error:', err)
     } finally {
       setLoading(false)
+      fetchingItemsRef.current = false
     }
   }, [])
 
   // Fetch categories from Data sheet
   const fetchCategoriesList = useCallback(async () => {
+    // Prevent concurrent calls
+    if (fetchingCategoriesRef.current) {
+      console.log('Categories fetch already in progress, skipping...')
+      return
+    }
+    
+    fetchingCategoriesRef.current = true
     try {
       const data = await fetchCategories()
       setCategories(data)
@@ -156,6 +188,8 @@ export const InventoryProvider = ({ children }) => {
       // Don't set error state for categories, just log it
       // Fallback to empty array
       setCategories([])
+    } finally {
+      fetchingCategoriesRef.current = false
     }
   }, [])
 
@@ -253,6 +287,89 @@ export const InventoryProvider = ({ children }) => {
     })
   }, [items])
 
+  // Manual cleanup function
+  const runCleanup = useCallback(async () => {
+    setCleanupLoading(true)
+    try {
+      const result = await removeOldQuantityLogEntries()
+      console.log('Cleanup completed:', result.message)
+      // Store the cleanup timestamp
+      localStorage.setItem('quantity_log_last_cleanup', Date.now().toString())
+      setShowCleanupDialog(false)
+      return result
+    } catch (error) {
+      console.error('Cleanup failed:', error)
+      throw error
+    } finally {
+      setCleanupLoading(false)
+    }
+  }, [])
+
+  // Check if cleanup is needed and show dialog
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return
+    }
+
+    const CLEANUP_STORAGE_KEY = 'quantity_log_last_cleanup'
+    const CLEANUP_DIALOG_DISMISSED_KEY = 'quantity_log_cleanup_dialog_dismissed'
+    const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
+
+    const checkCleanupNeeded = () => {
+      const lastCleanup = localStorage.getItem(CLEANUP_STORAGE_KEY)
+      const dialogDismissed = localStorage.getItem(CLEANUP_DIALOG_DISMISSED_KEY)
+      const now = Date.now()
+      
+      // Check if it's been a month since last cleanup
+      const needsCleanup = !lastCleanup || (now - parseInt(lastCleanup, 10)) >= ONE_MONTH_MS
+      
+      // Show dialog if cleanup is needed and user hasn't dismissed it today
+      if (needsCleanup) {
+        const dismissedDate = dialogDismissed ? parseInt(dialogDismissed, 10) : 0
+        const oneDayAgo = now - (24 * 60 * 60 * 1000)
+        
+        // Show dialog if never dismissed or dismissed more than a day ago
+        if (!dialogDismissed || dismissedDate < oneDayAgo) {
+          setShowCleanupDialog(true)
+        }
+      }
+    }
+
+    // Check immediately when authenticated
+    checkCleanupNeeded()
+
+    // Check periodically (every hour)
+    const intervalId = setInterval(checkCleanupNeeded, 60 * 60 * 1000)
+
+    return () => clearInterval(intervalId)
+  }, [isAuthenticated])
+
+  // Handle cleanup dialog actions
+  const handleCleanupConfirm = useCallback(async () => {
+    try {
+      await runCleanup()
+    } catch (error) {
+      setError('Failed to clean up old logs: ' + error.message)
+    }
+  }, [runCleanup])
+
+  const handleCleanupCancel = useCallback(() => {
+    setShowCleanupDialog(false)
+    // Remember that user dismissed the dialog today
+    localStorage.setItem('quantity_log_cleanup_dialog_dismissed', Date.now().toString())
+  }, [])
+
+  const handleCleanupLater = useCallback(() => {
+    setShowCleanupDialog(false)
+    // Remember that user dismissed the dialog today
+    localStorage.setItem('quantity_log_cleanup_dialog_dismissed', Date.now().toString())
+  }, [])
+
+  // Function to manually open cleanup dialog
+  const openCleanupDialog = useCallback(() => {
+    setShowCleanupDialog(true)
+  }, [])
+
   const value = {
     items,
     filteredItems,
@@ -273,12 +390,60 @@ export const InventoryProvider = ({ children }) => {
     setFilterCategory,
     setFilterStockLevel,
     handleSignIn,
-    handleSignOut
+    handleSignOut,
+    openCleanupDialog
   }
 
   return (
     <InventoryContext.Provider value={value}>
       {children}
+      
+      {/* Cleanup Dialog */}
+      <Dialog open={showCleanupDialog} onOpenChange={setShowCleanupDialog}>
+        <DialogContent onClose={handleCleanupCancel}>
+          <DialogHeader>
+            <DialogTitle>Clean Up Old Log Entries?</DialogTitle>
+            <DialogDescription>
+              It's been more than 3 months since the last cleanup. Would you like to remove quantity log entries older than 3 months?
+              <br /><br />
+              This will help keep your log file manageable and improve performance.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCleanupLater}
+              disabled={cleanupLoading}
+            >
+              Remind Me Later
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleCleanupCancel}
+              disabled={cleanupLoading}
+            >
+              Don't Ask Again Today
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleCleanupConfirm}
+              disabled={cleanupLoading}
+            >
+              {cleanupLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Cleaning...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clean Up Now
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </InventoryContext.Provider>
   )
 }

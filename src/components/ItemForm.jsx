@@ -20,6 +20,11 @@ const ItemForm = ({ item, onClose }) => {
     description: '',
     lowStockLevel: ''
   })
+  const [stockAdjustment, setStockAdjustment] = useState({
+    type: 'add', // 'add' or 'subtract'
+    amount: ''
+  })
+  const [quantityChangeType, setQuantityChangeType] = useState(null) // Track if quick adjustment was used
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState(null)
 
@@ -36,12 +41,16 @@ const ItemForm = ({ item, onClose }) => {
         description: item.description || '',
         lowStockLevel: item.lowStockLevel?.toString() || LOW_STOCK_THRESHOLD.toString()
       })
+      // Reset change type when item changes
+      setQuantityChangeType(null)
     } else {
       // Set default low stock level for new items
       setFormData(prev => ({
         ...prev,
         lowStockLevel: prev.lowStockLevel || LOW_STOCK_THRESHOLD.toString()
       }))
+      // Reset change type for new items
+      setQuantityChangeType(null)
     }
   }, [item])
 
@@ -84,7 +93,9 @@ const ItemForm = ({ item, onClose }) => {
         price: parseFloat(formData.price || '0'),
         category: formData.category.trim(),
         description: formData.description.trim(),
-        lowStockLevel: parseInt(formData.lowStockLevel || LOW_STOCK_THRESHOLD.toString(), 10)
+        lowStockLevel: parseInt(formData.lowStockLevel || LOW_STOCK_THRESHOLD.toString(), 10),
+        // Add adjustment info if this was a quick adjustment
+        quantityChangeType: quantityChangeType
       }
 
       if (isEditing) {
@@ -93,6 +104,8 @@ const ItemForm = ({ item, onClose }) => {
         await addItem(itemData)
       }
 
+      // Reset change type after submission
+      setQuantityChangeType(null)
       onClose()
     } catch (error) {
       setSubmitError(error.message || 'Failed to save item')
@@ -110,6 +123,72 @@ const ItemForm = ({ item, onClose }) => {
     const currentValue = parseInt(formData.quantity || '0', 10)
     const newValue = Math.max(0, currentValue + delta)
     handleChange('quantity', newValue.toString())
+  }
+
+  // Handler for quick stock adjustment
+  const handleStockAdjustment = async () => {
+    const currentQuantity = parseInt(formData.quantity || '0', 10)
+    const adjustmentAmount = parseInt(stockAdjustment.amount || '0', 10)
+    
+    if (adjustmentAmount <= 0) {
+      setErrors(prev => ({ ...prev, stockAdjustment: 'Amount must be greater than 0' }))
+      return
+    }
+
+    let newQuantity
+    if (stockAdjustment.type === 'add') {
+      newQuantity = currentQuantity + adjustmentAmount
+    } else {
+      newQuantity = Math.max(0, currentQuantity - adjustmentAmount)
+    }
+
+    // Store the change type for logging
+    setQuantityChangeType(stockAdjustment.type)
+    
+    // Update quantity in form data
+    const updatedFormData = {
+      ...formData,
+      quantity: newQuantity.toString()
+    }
+    setFormData(updatedFormData)
+    setStockAdjustment({ type: 'add', amount: '' })
+    setErrors(prev => ({ ...prev, stockAdjustment: null }))
+
+    // Auto-submit if editing and form is valid
+    if (isEditing) {
+      // Validate before submitting
+      const validationErrors = {}
+      if (!updatedFormData.name.trim()) {
+        validationErrors.name = 'Name is required'
+      }
+      if (updatedFormData.quantity !== '' && (isNaN(updatedFormData.quantity) || parseFloat(updatedFormData.quantity) < 0)) {
+        validationErrors.quantity = 'Quantity must be a non-negative number'
+      }
+      
+      if (Object.keys(validationErrors).length === 0) {
+        // Form is valid, submit it
+        setSubmitError(null)
+        try {
+          const itemData = {
+            name: updatedFormData.name.trim(),
+            sku: updatedFormData.sku.trim(),
+            quantity: parseInt(updatedFormData.quantity || '0', 10),
+            price: parseFloat(updatedFormData.price || '0'),
+            category: updatedFormData.category.trim(),
+            description: updatedFormData.description.trim(),
+            lowStockLevel: parseInt(updatedFormData.lowStockLevel || LOW_STOCK_THRESHOLD.toString(), 10),
+            quantityChangeType: stockAdjustment.type
+          }
+          await updateItem(item.id, itemData)
+          setQuantityChangeType(null)
+          onClose()
+        } catch (error) {
+          setSubmitError(error.message || 'Failed to save item')
+        }
+      } else {
+        setErrors(validationErrors)
+      }
+    }
   }
 
   const handleDelete = async () => {
@@ -155,6 +234,73 @@ const ItemForm = ({ item, onClose }) => {
               <p className="text-sm text-destructive">{errors.name}</p>
             )}
           </div>
+
+          {/* Quick Stock Adjustment - Only show when editing */}
+          {isEditing && (
+            <div className="space-y-1.5 sm:space-y-2 p-3 bg-muted/50 rounded-md border">
+              <Label className="text-sm sm:text-base font-semibold">Quick Stock Adjustment</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                {/* Add/Subtract Toggle */}
+                <div className="flex gap-1 border rounded-md p-1 bg-background">
+                  <Button
+                    type="button"
+                    variant={stockAdjustment.type === 'add' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setStockAdjustment(prev => ({ ...prev, type: 'add' }))}
+                    className={`flex-1 ${stockAdjustment.type === 'add' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={stockAdjustment.type === 'subtract' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setStockAdjustment(prev => ({ ...prev, type: 'subtract' }))}
+                    className={`flex-1 ${stockAdjustment.type === 'subtract' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
+                  >
+                    <Minus className="h-3 w-3 mr-1" />
+                    Subtract
+                  </Button>
+                </div>
+                
+                {/* Amount Input */}
+                <Input
+                  type="number"
+                  min="1"
+                  value={stockAdjustment.amount}
+                  onChange={(e) => {
+                    setStockAdjustment(prev => ({ ...prev, amount: e.target.value }))
+                    if (errors.stockAdjustment) {
+                      setErrors(prev => ({ ...prev, stockAdjustment: null }))
+                    }
+                  }}
+                  placeholder="Amount"
+                  className="flex-1"
+                />
+                
+                {/* Apply Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleStockAdjustment}
+                  disabled={!stockAdjustment.amount || parseInt(stockAdjustment.amount || '0', 10) <= 0 || loading}
+                  className="whitespace-nowrap"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
+                  Apply
+                </Button>
+              </div>
+              {errors.stockAdjustment && (
+                <p className="text-sm text-destructive">{errors.stockAdjustment}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Use this to quickly add or remove stock. The quantity will update and save automatically.
+              </p>
+            </div>
+          )}
 
           {/* Row 1: Quantity (full width) */}
           <div className="space-y-1.5 sm:space-y-2">
